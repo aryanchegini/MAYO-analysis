@@ -71,26 +71,26 @@ OUTPUT_DIR = os.path.join("results", "h1_demo" if DEMO_MODE else "h1")
 
 # ---------------------------------------------------------------------------
 # Groebner configuration
-#   Priority scales (1-7) run first, each with INSTANCES_PER_SCALE instances.
+#   Priority scales (1-6) run first, each with INSTANCES_PER_SCALE instances.
 #   Remaining scales run after the SAT priority phase, with the instance
-#   counts specified here (edit freely to reduce/expand each).
+#   counts specified here.
 # ---------------------------------------------------------------------------
-GROEBNER_PRIORITY_SCALES = list(range(1, 8))   # scales 1-7
+GROEBNER_PRIORITY_SCALES = list(range(1, 7)) # scales 1-6
 
-GROEBNER_REMAINING_INSTANCES = {               # scale_idx -> n_instances
-    8: 10,
-    9:  1,
+GROEBNER_REMAINING_INSTANCES = {  
+    7: 50,
+    8: 5,
+    9: 1,
 }
 
 # ---------------------------------------------------------------------------
 # SAT configuration
 #   Priority scales (1-4) run after the Groebner priority phase, each with
 #   INSTANCES_PER_SCALE instances.
-#   Remaining scales are handled via REMAINING_PHASE_ORDER below.
 # ---------------------------------------------------------------------------
-SAT_PRIORITY_SCALES = list(range(1, 5))        # scales 1-4
+SAT_PRIORITY_SCALES = list(range(1, 5)) # scales 1-4
 
-SAT_REMAINING_INSTANCES = {                    # scale_idx -> n_instances
+SAT_REMAINING_INSTANCES = {
     5: 1,
 }
 
@@ -101,12 +101,13 @@ SAT_REMAINING_INSTANCES = {                    # scale_idx -> n_instances
 #   however you like.  Instance counts come from GROEBNER/SAT_REMAINING_INSTANCES.
 # ---------------------------------------------------------------------------
 REMAINING_PHASE_ORDER = [
+    ("groebner", 7),   # Groebner n=10, 50 instances
     ("groebner", 8),   # Groebner n=11, 10 instances
     ("sat",      5),   # SAT      n=8,  10 instances
     ("groebner", 9),   # Groebner n=12,  5 instances
 ]
 
-# Wall-clock timeout per scale index in seconds.
+# Wall-clock timeout per scale index in seconds. Estimated timmings recorded on M1 Macbook Air 8GB Mem
 GROEBNER_TIMEOUT_PER_SCALE = {
     1: 5,     # n=4
     2: 10,    # n=5
@@ -123,8 +124,8 @@ SAT_TIMEOUT_PER_SCALE = {
     1: 10,    # n=4
     2: 30,    # n=5
     3: 200,   # n=6:  SAT ~40s
-    4: 2000,  # n=7:  SAT ~300s
-    5: 5000,  # n=8:  SAT ?
+    4: 1000,  # n=7:  SAT ~300s
+    5: 5000,  # n=8:  SAT >80 mins
 }
 
 SEED_BASE = 12345
@@ -429,7 +430,7 @@ def run_h1():
                 tag = (f"{res['cpu_time_s']:.3f}s"
                        f"{'  [TO]' if res['timed_out'] else ''}")
                 label = "GB" if solver_name == "groebner" else "SAT"
-                print(f"    inst {inst+1:2d}/{n_inst}  {label}={tag}")
+                print(f"    inst {inst+1:2d}/{n_inst}  {label}={tag}  seed={seed}")
 
     write_header = not os.path.exists(H1_CSV) or os.path.getsize(H1_CSV) == 0
     with open(H1_CSV, "a", newline="") as fh:
@@ -437,9 +438,9 @@ def run_h1():
         if write_header:
             writer.writeheader()
 
-        # Phase 1: Groebner — priority scales 1-7, full INSTANCES_PER_SCALE each
+        # Phase 1: Groebner — priority scales 1-6, full INSTANCES_PER_SCALE each
         _run_phase(
-            "Phase 1: Groebner (priority scales 1-7)",
+            "Phase 1: Groebner (priority scales 1-6)",
             "groebner",
             GROEBNER_PRIORITY_SCALES,
             lambda _: INSTANCES_PER_SCALE,

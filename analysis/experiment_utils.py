@@ -32,8 +32,8 @@ def _total_ram_bytes():
 
 
 def _default_mem_limit():
-    """Cap each child at 60% of total RAM, leaving headroom for OS and parent."""
-    return int(_total_ram_bytes() * 0.6)
+    """Cap each child at 30% of total RAM, leaving headroom for OS and parent."""
+    return int(_total_ram_bytes() * 0.3)
 
 
 # Per-child virtual memory cap in bytes.  Prevents the Groebner computation
