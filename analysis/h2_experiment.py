@@ -65,7 +65,7 @@ H2_SCALES = [
     (12, 10, 5, 5),  # scale 4: kn=60,  v=7, o=5, m=10
     (14, 11, 6, 6),  # scale 5: kn=84,  v=8, o=6, m=11
 ]
-DEMO_MODE = True
+DEMO_MODE = False
 
 if DEMO_MODE:
     # Scales 1-2: full 50 instances (fast, gives real statistics).
