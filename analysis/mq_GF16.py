@@ -11,6 +11,17 @@ Run directly to execute the built-in correctness tests.
 
 from sage.all import GF, PolynomialRing, matrix, vector, set_random_seed
 
+
+def _upper_tri(M):
+    """Fold M into upper-triangular quadratic-form representative (in-place)."""
+    sz = M.nrows()
+    for r in range(sz):
+        for c in range(r + 1, sz):
+            M[r, c] += M[c, r]
+            M[c, r] = 0
+    return M
+
+
 # GF(16) field setup. MAYO uses GF(16) with irreducible polynomial x^4 + x + 1.
 F16 = GF(16, 'a')
 assert F16.gen()**4 + F16.gen() + 1 == 0, "Expected GF(16) with poly a^4+a+1"
@@ -170,17 +181,21 @@ def generate_whipped_instance(n, m, o, k, seed):
 
     Structure
     ---------
-    Each of the m underlying n x n matrices P^(a) has the form:
+    A secret oil matrix O (v x o) is sampled uniformly.  The oil space is
+    rowspace([O | I_o]^T).  Each of the m underlying n x n matrices P^(a)
+    has the block form:
 
         [ P1  P2 ]
-        [  0   0 ]
+        [  0  P3 ]
 
-    where P1 is a (v x v) upper-triangular matrix and P2 is a (v x o) matrix.
-    The oil-oil block (P3) is identically zero, which is the UOV condition: the
-    quadratic form P^(a)(x, x) vanishes whenever x is a pure oil vector
-    (vinegar components = 0).  Using symmetric matrices for P^(a) would cause
-    cross terms in the whipped sum to cancel in characteristic 2, so
-    upper-triangular (not symmetric) matrices are used throughout.
+    where P1 (v x v upper-triangular) and P2 (v x o) are sampled uniformly,
+    and P3 (o x o upper-triangular) is derived as
+
+        P3 = Upper(-O^T P1 O - O^T P2)
+
+    so that the quadratic form P^(a)(x, x) vanishes for every oil vector
+    x in rowspace([O | I_o]^T).  This matches the MAYO key-generation
+    procedure (Fig. 2 of the MAYO paper).
 
     Target
     ------
@@ -195,15 +210,38 @@ def generate_whipped_instance(n, m, o, k, seed):
     set_random_seed(seed)
     v = n - o
 
-    # Build m upper-triangular P matrices with zero oil-oil block.
+    # Sample secret oil matrix O (v x o).
+    O_mat = matrix(F16, v, o)
+    for r in range(v):
+        for c in range(o):
+            O_mat[r, c] = F16.random_element()
+
+    # Build m P matrices: P1 (v x v upper tri) and P2 (v x o) sampled
+    # uniformly; P3 (o x o upper tri) = Upper(-O^T P1 O - O^T P2).
     P_mats = []
     for _ in range(m):
+        P1 = matrix(F16, v, v)
+        for r in range(v):
+            for c in range(r, v):
+                P1[r, c] = F16.random_element()
+
+        P2 = matrix(F16, v, o)
+        for r in range(v):
+            for c in range(o):
+                P2[r, c] = F16.random_element()
+
+        P3 = _upper_tri(-O_mat.transpose() * P1 * O_mat
+                         - O_mat.transpose() * P2)
+
         M = matrix(F16, n, n)
-        for r in range(n):
-            for c in range(r, n):
-                if r < v: # rows in vinegar block: fill P1 and P2
-                    M[r, c] = F16.random_element()
-                # rows in oil block (r >= v): P3 = 0, leave as zero
+        for r in range(v):
+            for c in range(r, v):
+                M[r, c] = P1[r, c]
+            for c in range(o):
+                M[r, v + c] = P2[r, c]
+        for r in range(o):
+            for c in range(r, o):
+                M[v + r, v + c] = P3[r, c]
         P_mats.append(M)
 
     F16_poly_ring = F16['z']
@@ -338,14 +376,48 @@ if __name__ == "__main__":
         "planted solution does not satisfy generated system"
     print("  OK -- planted solution satisfies generated system")
 
-    print("Testing generate_whipped_instance (planted solution)...")
-    R, xs, eqs, target, kn, x0_int = generate_whipped_instance(n=6, m=4, o=2, k=2, seed=42)
+    print("Testing generate_whipped_instance (planted solution + UOV condition)...")
+    _n, _m, _o, _k = 6, 4, 2, 2
+    _v = _n - _o
+    R, xs, eqs, target, kn, x0_int = generate_whipped_instance(n=_n, m=_m, o=_o, k=_k, seed=42)
     x0_gf = [INT_TO_F16[v] for v in x0_int]
     sub   = {xs[i]: x0_gf[i] for i in range(kn)}
     for a, eq in enumerate(eqs):
         val = eq.subs(sub)
         assert val == F16.zero(), f"Equation {a} not satisfied: got {val}"
     print("  OK -- planted solution satisfies all whipped equations")
+
+    # Replay the RNG to reconstruct O and P matrices, then verify
+    # that each P^(a)(oil_vec) = 0 for random oil vectors.
+    set_random_seed(42)
+    _O = matrix(F16, _v, _o,
+                [[F16.random_element() for _ in range(_o)] for _ in range(_v)])
+    _P_mats = []
+    for _ in range(_m):
+        _P1 = matrix(F16, _v, _v)
+        for r in range(_v):
+            for c in range(r, _v):
+                _P1[r, c] = F16.random_element()
+        _P2 = matrix(F16, _v, _o,
+                     [[F16.random_element() for _ in range(_o)] for _ in range(_v)])
+        _P3 = _upper_tri(-_O.transpose() * _P1 * _O
+                          - _O.transpose() * _P2)
+        _M = matrix(F16, _n, _n)
+        for r in range(_v):
+            for c in range(r, _v): _M[r, c] = _P1[r, c]
+            for c in range(_o):   _M[r, _v + c] = _P2[r, c]
+        for r in range(_o):
+            for c in range(r, _o): _M[_v + r, _v + c] = _P3[r, c]
+        _P_mats.append(_M)
+    set_random_seed(99)  # fresh seed for oil test vectors
+    for _ in range(20):
+        t = vector(F16, [F16.random_element() for _ in range(_o)])
+        oil_vec = vector(list(_O * t) + list(t))
+        for a, _P in enumerate(_P_mats):
+            val = oil_vec * _P * oil_vec
+            assert val == F16.zero(), \
+                f"UOV condition violated: P^({a})(oil_vec) = {val}"
+    print("  OK -- UOV condition holds (P^(a) vanishes on all oil vectors)")
 
     print("Testing reduce_with_planted_solution (solution survives reduction)...")
     eqs_red, feqs, free_idx = reduce_with_planted_solution(R, xs, eqs, kn, 4, x0_int, seed=42)

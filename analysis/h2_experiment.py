@@ -12,8 +12,11 @@ Output:     results/h2/h2_results.csv
 Whipped-map structure
 ---------------------
 The m underlying P matrices are genuine UOV maps: each is an n x n
-upper-triangular matrix with zero oil-oil block (P3 = 0), matching the MAYO
-spec.  The oil dimension o is included in each scale tuple (n, m, o, k).
+upper-triangular matrix with blocks [[P1, P2], [0, P3]], where P1 (v x v) and
+P2 (v x o) are random and P3 = Upper(-O^T P1 O - O^T P2) is derived from a
+secret oil matrix O so that each P^(a) vanishes on the oil space, matching the
+MAYO key-generation spec.  The oil dimension o is included in each scale tuple
+(n, m, o, k).
 
 Planted solutions
 -----------------
@@ -40,11 +43,12 @@ so interrupted runs can be resumed without losing progress.
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import csv, resource, time, multiprocessing
+import csv, json, resource, time, multiprocessing
 
 from mq_GF16 import (
     generate_whipped_instance, generate_random_instance,
     reduce_with_planted_solution,
+    F16, F16_TO_INT,
 )
 from experiment_utils import mem_delta_kb, run_with_timeout, load_completed
 
@@ -55,10 +59,11 @@ from experiment_utils import mem_delta_kb, run_with_timeout, load_completed
 # After planted-solution variable fixing: m equations in m unknowns.
 # Constraint: o < n/2  (more vinegar than oil, required for UOV security).
 H2_SCALES = [
-    (6,  4, 2, 2),   # scale 1:  kn=12,  v=4, o=2, m=4
-    (8,  6, 2, 3),   # scale 2:  kn=24,  v=6, o=2, m=6
-    (10, 8, 3, 4),   # scale 3:  kn=40,  v=7, o=3, m=8
-    (12, 10, 3, 5),  # scale 4:  kn=60,  v=9, o=3, m=10
+    (6,  4,  2, 2),  # scale 1: kn=12,  v=4, o=2, m=4  (o already at max)
+    (8,  6,  3, 3),  # scale 2: kn=24,  v=5, o=3, m=6
+    (10, 8,  4, 4),  # scale 3: kn=40,  v=6, o=4, m=8
+    (12, 10, 5, 5),  # scale 4: kn=60,  v=7, o=5, m=10
+    (14, 11, 6, 6),  # scale 5: kn=84,  v=8, o=6, m=11
 ]
 DEMO_MODE = True
 
@@ -66,8 +71,9 @@ if DEMO_MODE:
     # Scales 1-2: full 50 instances (fast, gives real statistics).
     # Scale 3: 20 instances (enough for a distribution, ~7-33min).
     # Scale 4: 3 instances (calibration timings only, up to ~60min).
-    INSTANCES_PER_SCALE      = 50
-    SCALE_INSTANCES_OVERRIDE = {1:0, 2:0, 3: 0, 4: 3}
+    INSTANCES_PER_SCALE      = 1
+    # SCALE_INSTANCES_OVERRIDE = {3: 20, 4: 3}
+    SCALE_INSTANCES_OVERRIDE = {}
     OUTPUT_DIR               = os.path.join("results", "h2_demo")
 else:
     INSTANCES_PER_SCALE      = 50
@@ -84,6 +90,7 @@ FIELDNAMES = [
     "timeout_s",
     "cpu_time_s", "wall_time_s", "memory_kb",
     "degree", "success", "timed_out", "error",
+    "n_solutions", "solution", "solution_valid",
 ]
 
 
@@ -92,7 +99,8 @@ def _groebner_worker(instance_type, n, m, o, k, base_seed):
     Generate the instance from base_seed and solve via Groebner basis.
 
     For 'whipped': uses base_seed for instance generation and planted-solution
-    variable fixing.  P matrices have genuine UOV structure (zero oil-oil block).
+    variable fixing.  P matrices have genuine UOV structure with P3 derived as
+    Upper(-O^T P1 O - O^T P2) from a secret oil matrix O.
 
     For 'random': uses base_seed + 5_000_000 for generation and fixing,
     keeping the random baseline independent from the whipped instance.
@@ -105,19 +113,34 @@ def _groebner_worker(instance_type, n, m, o, k, base_seed):
     """
     kn = k * n
     if instance_type == "whipped":
-        R, xs, equations, _, _, x0_int = generate_whipped_instance(n, m, o, k, base_seed)
-        eqs_red, feqs, _               = reduce_with_planted_solution(R, xs, equations, kn, m, x0_int, base_seed)
+        R, xs, equations, _, _, x0_int         = generate_whipped_instance(n, m, o, k, base_seed)
+        eqs_red, feqs, free_indices             = reduce_with_planted_solution(R, xs, equations, kn, m, x0_int, base_seed)
     else:
-        rand_seed                      = base_seed + 5_000_000
-        R, xs, equations, _, y0_int    = generate_random_instance(kn, m, rand_seed)
-        eqs_red, feqs, _               = reduce_with_planted_solution(R, xs, equations, kn, m, y0_int, rand_seed)
+        rand_seed                               = base_seed + 5_000_000
+        R, xs, equations, _, y0_int             = generate_random_instance(kn, m, rand_seed)
+        eqs_red, feqs, free_indices             = reduce_with_planted_solution(R, xs, equations, kn, m, y0_int, rand_seed)
+
+    # Remap reduced equations into a fresh m-variable ring so the ideal is
+    # zero-dimensional.  eqs_red lives in the full kn-variable ring R but only
+    # involves the m free variables; the other kn-m variables are unconstrained,
+    # which makes R.ideal(...).groebner_basis() fail with a dimension error.
+    from sage.all import PolynomialRing as _PR
+    R_m  = _PR(F16, m, 'y')
+    ys_m = R_m.gens()
+    phi  = R.hom(
+        [ys_m[free_indices.index(i)] if i in free_indices else R_m.zero()
+         for i in range(kn)],
+        R_m,
+    )
+    eqs_m  = [phi(eq) for eq in eqs_red]
+    feqs_m = [ys_m[i]**16 - ys_m[i] for i in range(m)]
 
     mem_before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     t_cpu0     = time.process_time()
     t_wall0    = time.time()
 
     try:
-        gb = R.ideal(eqs_red + feqs).groebner_basis()
+        gb = R_m.ideal(eqs_m + feqs_m).groebner_basis()
 
         cpu_time  = time.process_time() - t_cpu0
         wall_time = time.time()         - t_wall0
@@ -125,12 +148,29 @@ def _groebner_worker(instance_type, n, m, o, k, base_seed):
             mem_before, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         )
 
-        solved  = not (len(gb) == 1 and gb[0] == R.one())
+        solved  = not (len(gb) == 1 and gb[0] == R_m.one())
         max_deg = max((f.degree() for f in gb), default=0)
+
+        n_solutions   = 0
+        solution_json = ""
+        solution_valid = ""
+        if solved:
+            variety      = R_m.ideal(gb).variety()
+            n_solutions  = len(variety)
+            if variety:
+                pt             = variety[0]
+                vals           = [F16_TO_INT[pt[ys_m[i]]] for i in range(m)]
+                solution_json  = json.dumps(vals)
+                solution_valid = all(
+                    eq.subs({ys_m[i]: pt[ys_m[i]] for i in range(m)}) == 0
+                    for eq in eqs_m
+                )
 
         return dict(
             success=solved, cpu_time_s=cpu_time, wall_time_s=wall_time,
             memory_kb=mem_kb, degree=max_deg, timed_out=False, error="",
+            n_solutions=n_solutions, solution=solution_json,
+            solution_valid=solution_valid,
         )
 
     except Exception as exc:
@@ -139,6 +179,7 @@ def _groebner_worker(instance_type, n, m, o, k, base_seed):
         return dict(
             success=False, cpu_time_s=cpu_time, wall_time_s=wall_time,
             memory_kb=0, degree=-1, timed_out=False, error=str(exc),
+            n_solutions=0, solution="", solution_valid="",
         )
 
 
@@ -160,10 +201,13 @@ def _write_row(writer, scale_idx, n, m, o, k, kn, inst, seed, itype, timeout, re
         "cpu_time_s":    res["cpu_time_s"],
         "wall_time_s":   res["wall_time_s"],
         "memory_kb":     res["memory_kb"],
-        "degree":        res["degree"],
-        "success":       res["success"],
-        "timed_out":     res["timed_out"],
-        "error":         res.get("error", ""),
+        "degree":         res["degree"],
+        "success":        res["success"],
+        "timed_out":      res["timed_out"],
+        "error":          res.get("error", ""),
+        "n_solutions":    res.get("n_solutions", 0),
+        "solution":       res.get("solution", ""),
+        "solution_valid": res.get("solution_valid", ""),
     })
 
 
