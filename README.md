@@ -29,8 +29,8 @@ SageMath's Python environment:
 sage -pip install pycryptosat
 ```
 
-**Python packages** for the analysis / plotting scripts (`analyse_h1_h2.py`, `analyse_h3.py`).
-These run under plain Python 3 and do not require SageMath:
+**Python packages** for the analysis / plotting script (`analysis.py`).
+This runs under plain Python 3 and does not require SageMath:
 
 ```bash
 pip install -r requirements.txt
@@ -51,8 +51,7 @@ analysis/
   h1_experiment.py      H1: Groebner vs CryptoMiniSat on random MQ instances
   h2_experiment.py      H2: Groebner on whipped-map vs random-map instances
   h3_experiment.py      H3: Per-coordinate chi-squared uniformity test on MAYO signatures
-  analyse_h1_h2.py      Statistical analysis and plots for H1 and H2 results
-  analyse_h3.py         Chi-squared vs signing slack plots and per-scale heatmaps for H3
+  analysis.py           Statistical analysis and plots for H1, H2, and H3 results
 results/                Output CSVs and plots (created automatically on first run)
 MAYO-sage/              Reference MAYO implementation (see note below)
 ```
@@ -148,26 +147,20 @@ CHILD_MEM_LIMIT_GB=8 sage -python analysis/h1_experiment.py
 
 ## Running the analysis
 
-Once the experiment CSVs exist, generate plots and summary statistics.
-
-**H1 and H2:**
-
-```bash
-python3 analysis/analyse_h1_h2.py
-```
-
-Output is written to `results/h1/plots/` and `results/h2/plots/`, with summary
-CSVs at `results/h1/h1_summary.csv` and `results/h2/h2_summary.csv`.
-
-**H3:**
+Once the experiment CSVs exist, generate plots and summary statistics for all
+hypotheses in one go:
 
 ```bash
-python3 analysis/analyse_h3.py
+python3 analysis/analysis.py
 ```
 
-Output is written to `results/h3/`: a chi-squared vs signing slack plot
-(`h3_chi2_vs_gap.pdf`) and per-gap Pearson-residual heatmaps
-(`h3_heatmap_gap*.pdf`).
+The script skips any experiment whose CSV is missing and prints a message
+instead, so you can run it after any subset of experiments.
+
+Output locations:
+- `results/h1/plots/` — H1 PNG plots; `results/h1/h1_summary.csv`
+- `results/h2/plots/` — H2 PNG plots; `results/h2/h2_summary.csv`, `results/h2/h2_mannwhitney.csv`
+- `results/h3/` — H3 chi-squared vs gap plot and per-gap heatmaps (PDF)
 
 ## Correctness check
 
