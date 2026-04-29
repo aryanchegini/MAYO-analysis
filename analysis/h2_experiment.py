@@ -8,36 +8,6 @@ to an attacker compared with a uniformly random MQ map of equal dimensions.
 Run with:   sage -python analysis/h2_experiment.py
 Requires:   SageMath
 Output:     results/h2/h2_results.csv
-
-Whipped-map structure
----------------------
-The m underlying P matrices are genuine UOV maps: each is an n x n
-upper-triangular matrix with blocks [[P1, P2], [0, P3]], where P1 (v x v) and
-P2 (v x o) are random and P3 = Upper(-O^T P1 O - O^T P2) is derived from a
-secret oil matrix O so that each P^(a) vanishes on the oil space, matching the
-MAYO key-generation spec.  The oil dimension o is included in each scale tuple
-(n, m, o, k).
-
-Planted solutions
------------------
-Each instance is generated with a known preimage x0 such that P*(x0) = t.
-Variable fixing uses x0's own coordinates for the fixed positions, so the
-reduced m x m system always has at least one solution.  Without this, random
-variable fixing frequently produces infeasible systems, and the Groebner basis
-measures infeasibility certification rather than preimage-finding, a
-different computation that makes the whipped-vs-random comparison meaningless.
-
-Pairing
--------
-Each CSV row carries a pair_id column equal to the instance index.  Whipped
-and random rows with the same (scale, pair_id) are paired instances at
-identical dimensions and can be used directly in Wilcoxon signed-rank tests.
-
-Timeout / checkpoint
---------------------
-Each solver call runs in a child process hard-killed after TIMEOUT_SECONDS.
-CPU time is recovered via RUSAGE_CHILDREN.  The CSV is opened in append mode
-so interrupted runs can be resumed without losing progress.
 """
 
 import sys, os
@@ -52,12 +22,14 @@ from mq_GF16 import (
 )
 from experiment_utils import mem_delta_kb, run_with_timeout, load_completed
 
+
+# ---------------------------------------------------------------------------
 # Experiment parameters
 
 # Each scale is (n, m, o, k).
 # v = n-o (vinegar), o (oil), kn = k*n total variables, m equations.
 # After planted-solution variable fixing: m equations in m unknowns.
-# Constraint: o < n/2  (more vinegar than oil, required for UOV security).
+# Constraint: o < n/2 (more vinegar than oil, required for UOV security).
 H2_SCALES = [
     (6,  4,  2, 2),  # scale 1: kn=12,  v=4, o=2, m=4  (o already at max)
     (8,  6,  3, 3),  # scale 2: kn=24,  v=5, o=3, m=6
@@ -65,20 +37,8 @@ H2_SCALES = [
     (12, 10, 5, 5),  # scale 4: kn=60,  v=7, o=5, m=10
     (14, 11, 6, 6),  # scale 5: kn=84,  v=8, o=6, m=11
 ]
-DEMO_MODE = False
-
-if DEMO_MODE:
-    # Scales 1-2: full 50 instances (fast, gives real statistics).
-    # Scale 3: 20 instances (enough for a distribution, ~7-33min).
-    # Scale 4: 3 instances (calibration timings only, up to ~60min).
-    INSTANCES_PER_SCALE      = 1
-    # SCALE_INSTANCES_OVERRIDE = {3: 20, 4: 3}
-    SCALE_INSTANCES_OVERRIDE = {}
-    OUTPUT_DIR               = os.path.join("results", "h2_demo")
-else:
-    INSTANCES_PER_SCALE      = 50
-    SCALE_INSTANCES_OVERRIDE = {}
-    OUTPUT_DIR               = os.path.join("results", "h2")
+NUM_INSTANCES = 50
+OUTPUT_DIR    = os.path.join("results", "h2")
 
 TIMEOUT_SECONDS = 5000
 SEED_BASE       = 54321
@@ -93,23 +53,24 @@ FIELDNAMES = [
     "n_solutions", "solution", "solution_valid",
 ]
 
+# ---------------------------------------------------------------------------
 
 def _groebner_worker(instance_type, n, m, o, k, base_seed):
     """
     Generate the instance from base_seed and solve via Groebner basis.
 
     For 'whipped': uses base_seed for instance generation and planted-solution
-    variable fixing.  P matrices have genuine UOV structure with P3 derived as
+    variable fixing. P matrices have genuine UOV structure with P3 derived as
     Upper(-O^T P1 O - O^T P2) from a secret oil matrix O.
 
     For 'random': uses base_seed + 5_000_000 for generation and fixing,
-    keeping the random baseline independent from the whipped instance.
+    keeping the random instance independent from the whipped instance.
 
     In both cases the reduced m x m system is guaranteed to have at least one
     solution (the planted solution's free coordinates), so the Groebner basis
     measures preimage-finding difficulty rather than infeasibility certification.
 
-    Runs inside a child process; no internal timeout is needed.
+    Runs inside a child process. Parent hard-kills process if wall-clock time is exceeded.
     """
     kn = k * n
     if instance_type == "whipped":
@@ -121,9 +82,10 @@ def _groebner_worker(instance_type, n, m, o, k, base_seed):
         eqs_red, feqs, free_indices             = reduce_with_planted_solution(R, xs, equations, kn, m, y0_int, rand_seed)
 
     # Remap reduced equations into a fresh m-variable ring so the ideal is
-    # zero-dimensional.  eqs_red lives in the full kn-variable ring R but only
-    # involves the m free variables; the other kn-m variables are unconstrained,
+    # zero-dimensional.
+    # eqs_red lives in the full kn-variable ring R but only involves the m free variables; the other kn-m variables are unconstrained,
     # which makes R.ideal(...).groebner_basis() fail with a dimension error.
+
     from sage.all import PolynomialRing as _PR
     R_m  = _PR(F16, m, 'y')
     ys_m = R_m.gens()
@@ -148,6 +110,7 @@ def _groebner_worker(instance_type, n, m, o, k, base_seed):
             mem_before, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         )
 
+        # GB = {1} means the ideal is the whole ring -> no solution in GF(16)^n.
         solved  = not (len(gb) == 1 and gb[0] == R_m.one())
         max_deg = max((f.degree() for f in gb), default=0)
 
@@ -183,7 +146,7 @@ def _groebner_worker(instance_type, n, m, o, k, base_seed):
         )
 
 
-# -- CSV writer --
+# CSV writer
 
 def _write_row(writer, scale_idx, n, m, o, k, kn, inst, seed, itype, timeout, res):
     writer.writerow({
@@ -196,7 +159,7 @@ def _write_row(writer, scale_idx, n, m, o, k, kn, inst, seed, itype, timeout, re
         "instance":      inst,
         "seed":          seed,
         "instance_type": itype,
-        "pair_id":       inst,   # same inst index => paired whipped/random rows
+        "pair_id":       inst,   # same inst index -> paired whipped/random rows
         "timeout_s":     timeout,
         "cpu_time_s":    res["cpu_time_s"],
         "wall_time_s":   res["wall_time_s"],
@@ -211,14 +174,13 @@ def _write_row(writer, scale_idx, n, m, o, k, kn, inst, seed, itype, timeout, re
     })
 
 
-# -- Main experiment loop --
-
+# Main experiment loop
 def run_h2():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     completed = load_completed(H2_CSV)
     if completed:
-        print(f"Resuming -- {len(completed)} rows already recorded, skipping those.")
+        print(f"Resuming:{len(completed)} rows already recorded, skipping those.")
 
     write_header = not os.path.exists(H2_CSV) or os.path.getsize(H2_CSV) == 0
     with open(H2_CSV, "a", newline="") as fh:
@@ -228,10 +190,9 @@ def run_h2():
 
         for scale_idx, (n, m, o, k) in enumerate(H2_SCALES, start=1):
             kn = k * n
-            n_instances = SCALE_INSTANCES_OVERRIDE.get(scale_idx, INSTANCES_PER_SCALE)
-            print(f"\n  Scale {scale_idx}: n={n}, m={m}, o={o}, k={k}, kn={kn}  ({n_instances} instances)")
+            print(f"\n  Scale {scale_idx}: n={n}, m={m}, o={o}, k={k}, kn={kn}  ({NUM_INSTANCES} instances)")
 
-            for inst in range(n_instances):
+            for inst in range(NUM_INSTANCES):
                 base_seed = SEED_BASE + scale_idx * 10_000 + inst
                 rand_seed = base_seed + 5_000_000
 
@@ -249,7 +210,7 @@ def run_h2():
                 else:
                     w_tag = "skipped"
 
-                # Random baseline instance
+                # Random instance
                 if (scale_idx, inst, "random") not in completed:
                     res_r = run_with_timeout(
                         _groebner_worker,
@@ -264,8 +225,7 @@ def run_h2():
                     r_tag = "skipped"
 
                 if w_tag != "skipped" or r_tag != "skipped":
-                    print(f"    inst {inst+1:2d}/{INSTANCES_PER_SCALE}"
-                          f"  whipped={w_tag}  random={r_tag}")
+                    print(f"    inst {inst+1:2d}/{NUM_INSTANCES}  whipped={w_tag}  random={r_tag}")
 
     print(f"\nResults written to {H2_CSV}")
 

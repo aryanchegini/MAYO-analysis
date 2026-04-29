@@ -10,16 +10,16 @@ Requires:  SageMath, MAYO-sage
 Output:    results/h3/h3_data.csv, results/h3/h3_counts.csv
 
 Design
-------
-Fix n=20, m=20, o=4.  Vary k in {5, 6, 7, 8, 9, 10}, giving ko - m in
-{0, 4, 8, 12, 16, 20}.  At k=5 there is zero signing slack; at k=10 there
-are 20 free degrees of freedom.  For each scale, generate N=50,000 signatures
-from a single fixed key pair.  For each coordinate position (0..kn-1), count
+
+Fix n=20, m=20, o=4. Vary k in {5, 6, 7, 8, 9, 10}, giving ko - m in
+{0, 4, 8, 12, 16, 20}. At k=5 there is zero signing slack; at k=10 there
+are 20 free degrees of freedom. For each scale, generate N=50,000 signatures
+from a single fixed key pair. For each coordinate position (0..kn-1), count
 how often each GF(16) value appears, then compute the Pearson chi-squared
 against uniform (15 d.o.f., expected value 15).
 
 Signing uses mayo.sign() directly, which includes the restart loop and the
-specific v_i / o_i sampling procedure -- not a preimage solver.  This is the
+specific v_i / o_i sampling procedure - not a preimage solver. This is the
 only distribution that reflects the paper's security argument.
 
 Sanity check: mean chi-squared at ko - m = 0 should be well above 15 (~100).
@@ -38,8 +38,10 @@ try:
     from sagelib.utilities import decode_vec
     from sagelib.mayo import Mayo, R
 except ImportError as e:
-    sys.exit("Error loading MAYO-sage. Run `make pyfiles` first.\n" + str(e))
+    sys.exit("Error loading MAYO-sage. Run `make pyfiles` first.\n" + str(e))\
 
+# ---------------------------------------------------------------------------
+# Experiment parameters
 
 H3_SCALES = [
     {"ko_minus_m": 0,  "n": 20, "m": 20, "o": 4, "k": 5},
@@ -50,12 +52,12 @@ H3_SCALES = [
     {"ko_minus_m": 20, "n": 20, "m": 20, "o": 4, "k": 10},
 ]
 
-
 N_SAMPLES = int(os.environ.get("H3_N_SAMPLES", 50_000))
 
 DATA_FIELDNAMES  = ["ko_minus_m", "n", "m", "o", "k", "kn", "position", "chi_squared"]
 COUNT_FIELDNAMES = ["ko_minus_m", "position", "value", "count"]
 
+# ---------------------------------------------------------------------------
 
 def _completed_gaps(csv_path):
     """Return set of ko_minus_m values already written to csv_path."""
@@ -126,7 +128,8 @@ def run_scale(scale, n_samples):
     return data_rows, count_rows
 
 
-def main():
+# Main experiment loop
+def run_h3():
     out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results", "h3")
     os.makedirs(out_dir, exist_ok=True)
 
@@ -172,4 +175,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_h3()

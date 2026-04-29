@@ -65,7 +65,7 @@ for _c in range(16):
     ]
 
 # Boolean decomposition of GF(16) multiplication x*y into AND-products of bit pairs.
-# Derived by carry-less multiply of 4-bit values mod x^4+x+1:
+# Derived by carry-less multiplication of 4-bit values mod x^4+x+1:
 #   r0 = x0y0 ^ x1y3 ^ x2y2 ^ x3y1
 #   r1 = x0y1 ^ x1y0 ^ x1y3 ^ x2y2 ^ x3y1 ^ x2y3 ^ x3y2
 #   r2 = x0y2 ^ x1y1 ^ x2y0 ^ x2y3 ^ x3y2 ^ x3y3
@@ -78,7 +78,8 @@ _GF16_MUL_PATTERN = [
 ]
 
 
-# H1 instance generation
+# ----------------------- H1 -----------------------
+
 def generate_mq_coeffs(n, m, seed):
     """
     Generate a random dense MQ instance over GF(16).
@@ -87,15 +88,15 @@ def generate_mq_coeffs(n, m, seed):
     an expected density of 15/16 non-zero terms per monomial.
 
     The target is computed as F(x0) for a randomly sampled x0 in GF(16)^n,
-    so the system is guaranteed to have at least one solution.  This matches
+    so the system is guaranteed to have at least one solution. This matches
     Bard's methodology: the polynomials are fully random and the target is
-    derived by evaluation rather than sampled independently.  An independently
+    derived by evaluation rather than sampled independently. An independently
     sampled random target may not be in the image of F, producing UNSAT
     instances that cause SAT solvers to spend time on infeasibility proofs
     rather than solution finding.
 
     Returns
-    -------
+    ----------
     polys  : list of m dicts {(i,j): int}, i<=j, upper-triangular form
     target : list of m ints in 0..15
     """
@@ -148,12 +149,13 @@ def validate_solution(m, polys_data, target_data, solution_vals):
     return True
 
 
-# H2 instance generation
+# ----------------------- H2 -----------------------
+
 def companion_matrix(f_poly, m):
     """
     Build the m x m companion matrix of f_poly over F16.
 
-    f_poly is a monic polynomial of degree m in F16[z].  Convention: C acts
+    f_poly is a monic polynomial of degree m in F16[z]. Convention: C acts
     on column vectors so that Cv gives multiplication by z in F16[z]/(f_poly)
     when the vector encodes polynomial coefficients.
     """
@@ -173,16 +175,16 @@ def generate_whipped_instance(n, m, o, k, seed):
 
     Parameters
     ----------
-    n : int  -- total variables per block (v = n-o vinegar, o oil)
-    m : int  -- number of output components
-    o : int  -- oil dimension; must satisfy o < n and v = n-o > o
-    k : int  -- number of signature blocks
-    seed     -- SageMath random seed
+    n : int  - total variables per block (v = n-o vinegar, o oil)
+    m : int  - number of output components
+    o : int  - oil dimension; must satisfy o < n and v = n-o > o
+    k : int  - number of signature blocks
+    seed     - SageMath random seed
 
     Structure
-    ---------
-    A secret oil matrix O (v x o) is sampled uniformly.  The oil space is
-    rowspace([O | I_o]^T).  Each of the m underlying n x n matrices P^(a)
+    ----------
+    A secret oil matrix O (v x o) is sampled uniformly. The oil space is
+    rowspace([O | I_o]^T). Each of the m underlying n x n matrices P^(a)
     has the block form:
 
         [ P1  P2 ]
@@ -194,14 +196,14 @@ def generate_whipped_instance(n, m, o, k, seed):
         P3 = Upper(-O^T P1 O - O^T P2)
 
     so that the quadratic form P^(a)(x, x) vanishes for every oil vector
-    x in rowspace([O | I_o]^T).  This matches the MAYO key-generation
-    procedure (Fig. 2 of the MAYO paper).
+    x in rowspace([O | I_o]^T). This matches the MAYO key-generation
+    procedure (Fig. 2 of the MAYO 2022 paper).
 
     Target
     ------
-    A planted solution x0 is sampled uniformly from F16^{kn}.  The target
-    t = P*(x0) is computed by polynomial evaluation, so the returned system
-    P*(x) - t = 0 is guaranteed to have at least one solution.
+    A planted solution x0 is sampled uniformly from F16^{kn}. The target
+    t = P*(x0) is computed, so the returned system P*(x) - t = 0 is
+    guaranteed to have at least one solution.
 
     Returns (R, xs, equations, target, kn, x0_int) where x0_int is the
     planted solution as a list of kn integers in 0..15.
@@ -216,8 +218,9 @@ def generate_whipped_instance(n, m, o, k, seed):
         for c in range(o):
             O_mat[r, c] = F16.random_element()
 
-    # Build m P matrices: P1 (v x v upper tri) and P2 (v x o) sampled
-    # uniformly; P3 (o x o upper tri) = Upper(-O^T P1 O - O^T P2).
+    # Build m P matrices
+    # P1 (v x v upper tri) and P2 (v x o) sampled uniformly.
+    # P3 (o x o upper tri) = Upper(-O^T P1 O - O^T P2).
     P_mats = []
     for _ in range(m):
         P1 = matrix(F16, v, v)
@@ -332,17 +335,11 @@ def reduce_with_planted_solution(R, xs, equations, kn, m, x0_int, seed):
     """
     Fix kn-m variables to their values in x0_int, leaving m free variables.
 
-    Unlike random variable fixing, using the planted solution's own coordinates
-    for the fixed variables guarantees the reduced system has at least one
-    solution (the free coordinates of x0_int).  This means the Groebner basis
-    is always measuring preimage-finding difficulty, not infeasibility
-    certification -- which is the correct comparison for H2.
-
     The choice of which m variables are left free is random (derived from
     seed) but independent of the planted solution values.
 
     Returns
-    -------
+    ----------
     equations_reduced : list of m polynomials in R (only free vars appear)
     field_eqs         : list of m field equations x_i^16 - x_i (free vars)
     free_indices      : list of m variable indices kept as unknowns
@@ -374,7 +371,7 @@ if __name__ == "__main__":
     x0_check = [F16_TO_INT[F16.random_element()] for _ in range(5)]
     assert validate_solution(5, polys_t, target_t, x0_check), \
         "planted solution does not satisfy generated system"
-    print("  OK -- planted solution satisfies generated system")
+    print("  OK - planted solution satisfies generated system")
 
     print("Testing generate_whipped_instance (planted solution + UOV condition)...")
     _n, _m, _o, _k = 6, 4, 2, 2
@@ -385,7 +382,7 @@ if __name__ == "__main__":
     for a, eq in enumerate(eqs):
         val = eq.subs(sub)
         assert val == F16.zero(), f"Equation {a} not satisfied: got {val}"
-    print("  OK -- planted solution satisfies all whipped equations")
+    print("  OK - planted solution satisfies all whipped equations")
 
     # Replay the RNG to reconstruct O and P matrices, then verify
     # that each P^(a)(oil_vec) = 0 for random oil vectors.
@@ -417,7 +414,7 @@ if __name__ == "__main__":
             val = oil_vec * _P * oil_vec
             assert val == F16.zero(), \
                 f"UOV condition violated: P^({a})(oil_vec) = {val}"
-    print("  OK -- UOV condition holds (P^(a) vanishes on all oil vectors)")
+    print("  OK - UOV condition holds (P^(a) vanishes on all oil vectors)")
 
     print("Testing reduce_with_planted_solution (solution survives reduction)...")
     eqs_red, feqs, free_idx = reduce_with_planted_solution(R, xs, eqs, kn, 4, x0_int, seed=42)
@@ -425,7 +422,7 @@ if __name__ == "__main__":
     for a, eq in enumerate(eqs_red):
         val = eq.subs(free_sub)
         assert val == F16.zero(), f"Reduced equation {a} not satisfied: got {val}"
-    print("  OK -- planted solution satisfies all reduced equations")
+    print("  OK - planted solution satisfies all reduced equations")
 
     print("Testing generate_random_instance (planted solution)...")
     R2, ys, eqs2, target2, y0_int = generate_random_instance(kn=12, m=4, seed=99)
@@ -434,6 +431,6 @@ if __name__ == "__main__":
     for a, eq in enumerate(eqs2):
         val = eq.subs(sub2)
         assert val == F16.zero(), f"Random equation {a} not satisfied: got {val}"
-    print("  OK -- planted solution satisfies all random equations")
+    print("  OK - planted solution satisfies all random equations")
 
     print("\nAll tests passed.")

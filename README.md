@@ -65,22 +65,16 @@ This directory is not included in the repository.  Clone it alongside the analys
 git clone https://github.com/PQCMayo/MAYO-sage.git MAYO-sage
 ```
 
-The H1 and H2 experiments do **not** depend on MAYO-sage.
+The H1 and H2 experiments do **not** depend on MAYO-sage. However, H3 does.
 
 ## Running the experiments
 
 All experiment scripts are run with `sage -python` from the **repository root**.
-They write results to `results/h1/`, `results/h2/`, and `results/h3/` respectively
-(or to `results/h1_demo/` and `results/h2_demo/` in demo mode — see below).
+They write results to `results/h1/`, `results/h2/`, and `results/h3/` respectively.
 
-### Demo run (~1–4 hours)
+### Running H1 and H2
 
-The H1 and H2 scripts have a `DEMO_MODE = True` flag near the top of the parameters
-block.  In demo mode, fewer instances are run and the slowest scales are reduced or
-dropped, so you can verify the pipeline and get indicative timings before committing
-to an overnight run.
-
-Run H1 and H2 sequentially (H2 starts only if H1 exits cleanly):
+Run sequentially (H2 starts only if H1 exits cleanly):
 
 ```bash
 sage -python analysis/h1_experiment.py && sage -python analysis/h2_experiment.py
@@ -98,22 +92,16 @@ Progress can be monitored live:
 tail -f run.log
 ```
 
-The CSVs are flushed after every row, so you can also inspect partial results
-directly:
+The CSVs are flushed after every row, so you can also inspect partial results directly:
 
 ```bash
-cat results/h1_demo/h1_results.csv
-cat results/h2_demo/h2_results.csv
+cat results/h1/h1_results.csv
+cat results/h2/h2_results.csv
 ```
 
-### Full overnight run (H1 and H2)
+Each script runs 50 instances per scale; expect roughly 12–20 hours depending on hardware.
 
-1. Open `analysis/h1_experiment.py` and set `DEMO_MODE = False`.
-2. Open `analysis/h2_experiment.py` and set `DEMO_MODE = False`.
-3. Run as above.  Full run targets are 50 instances per scale across all scales;
-   expect roughly 12–20 hours depending on hardware.
-
-If interrupted, re-running the same command resumes from where it stopped — the
+If interrupted, re-running the same command resumes from where it stopped - the
 script reads the existing CSV on startup and skips any rows already recorded.
 
 ### H3: signature uniformity experiment
@@ -137,7 +125,7 @@ The script checkpoints by gap value, so it can be interrupted and resumed.
 
 ### Memory cap
 
-Each child process is capped at 60% of total RAM by default to prevent the OS
+Each child process is capped at 30% of total RAM by default to prevent the OS
 from swapping under memory pressure, which would make hard-kills slow and cause
 a cascade across 50-instance runs.  Override if needed:
 
@@ -158,9 +146,9 @@ The script skips any experiment whose CSV is missing and prints a message
 instead, so you can run it after any subset of experiments.
 
 Output locations:
-- `results/h1/plots/` — H1 PNG plots; `results/h1/h1_summary.csv`
-- `results/h2/plots/` — H2 PNG plots; `results/h2/h2_summary.csv`, `results/h2/h2_mannwhitney.csv`
-- `results/h3/` — H3 chi-squared vs gap plot and per-gap heatmaps (PDF)
+- `results/h1/plots/` - H1 PNG plots; `results/h1/h1_summary.csv`
+- `results/h2/plots/` - H2 PNG plots; `results/h2/h2_summary.csv`
+- `results/h3/` - H3 chi-squared vs gap plot and per-gap heatmaps (PDF)
 
 ## Correctness check
 

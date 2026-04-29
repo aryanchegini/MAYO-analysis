@@ -3,13 +3,13 @@
 Statistical analysis and plots for H1, H2, and H3 experiments.
 
 Run with:  python3 analysis/analysis.py
-Requires:  numpy, scipy, matplotlib, pandas
-Output:    results/h1/plots/        (H1 PNG files)
-           results/h2/plots/        (H2 PNG files)
-           results/h3/              (H3 PDF files)
-           results/h1/h1_summary.csv
-           results/h2/h2_summary.csv
-           results/h2/h2_mannwhitney.csv
+Output:    
+results/h1/plots/
+results/h2/plots/
+results/h3/
+results/h1/h1_summary.csv
+results/h2/h2_summary.csv
+results/h2/h2_mannwhitney.csv
 """
 
 import os
@@ -56,9 +56,7 @@ WHIPPED_COLOR  = "#1b7837"
 RANDOM_COLOR   = "#762a83"
 
 
-# ---------------------------------------------------------------------------
-# H1: Groebner basis vs SAT scaling
-# ---------------------------------------------------------------------------
+# ----------------------- H1 -----------------------
 
 def load_h1():
     df = pd.read_csv(H1_CSV)
@@ -156,7 +154,7 @@ def plot_h1_scaling(df, out_dir=H1_PLOTS):
     ax.set_yscale("log")
     ax.set_xlabel("Number of variables  n  (= m,  square regime)")
     ax.set_ylabel("CPU time (s)  [log scale]")
-    ax.set_title("H1 -- Solver scaling over GF(16), square MQ instances")
+    ax.set_title("H1:Solver scaling over GF(16), square MQ instances")
     ax.legend()
     ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
     ax.grid(True, which="both", linestyle="--", alpha=0.4)
@@ -189,7 +187,7 @@ def plot_h1_boxplots(df, out_dir=H1_PLOTS):
         ax.set_title(f"n = m = {n}")
         ax.set_xlabel("Solver")
     axes[0].set_ylabel("CPU time (s)")
-    fig.suptitle("H1 -- CPU time distribution per scale", y=1.01)
+    fig.suptitle("H1:CPU time distribution per scale", y=1.01)
     fig.tight_layout()
     path = os.path.join(out_dir, "h1_boxplots.png")
     fig.savefig(path, bbox_inches="tight")
@@ -213,7 +211,7 @@ def plot_h1_memory(df, out_dir=H1_PLOTS):
     ax.set_yscale("log")
     ax.set_xlabel("Number of variables  n")
     ax.set_ylabel("Peak memory delta (KB)  [log scale]")
-    ax.set_title("H1 -- Memory usage scaling")
+    ax.set_title("H1:Memory usage scaling")
     ax.legend()
     ax.grid(True, which="both", linestyle="--", alpha=0.4)
     fig.tight_layout()
@@ -232,7 +230,7 @@ def plot_h1_groebner_degree(df, out_dir=H1_PLOTS):
     ax.plot(ns, medians, marker="s", color=GROEBNER_COLOR, linewidth=1.8)
     ax.set_xlabel("n")
     ax.set_ylabel("Median max degree in Groebner basis")
-    ax.set_title("H1 -- Groebner basis: max degree reached")
+    ax.set_title("H1:Groebner basis: max degree reached")
     ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
     ax.grid(True, linestyle="--", alpha=0.4)
     fig.tight_layout()
@@ -242,9 +240,7 @@ def plot_h1_groebner_degree(df, out_dir=H1_PLOTS):
     print(f"Saved {path}")
 
 
-# ---------------------------------------------------------------------------
-# H2: Whipped vs random structural comparison
-# ---------------------------------------------------------------------------
+# ----------------------- H2 -----------------------
 
 def load_h2():
     df = pd.read_csv(H2_CSV)
@@ -324,7 +320,7 @@ def plot_h2_boxplots(df, out_dir=H2_PLOTS):
             bp["boxes"][1].set_facecolor(RANDOM_COLOR + "80")
         ax.set_title(f"n={int(info['n'])}, m={int(info['m'])},\no={int(info['o'])}, k={int(info['k'])}")
     axes[0].set_ylabel("CPU time (s)")
-    fig.suptitle("H2 -- Whipped P* vs random Q: solving time per scale", y=1.01)
+    fig.suptitle("H2:Whipped P* vs random Q: solving time per scale", y=1.01)
     fig.tight_layout()
     path = os.path.join(out_dir, "h2_boxplots.png")
     fig.savefig(path, bbox_inches="tight")
@@ -350,7 +346,7 @@ def plot_h2_ratio(df, out_dir=H2_PLOTS):
                label="Ratio = 1.0  (no difference)")
     ax.set_xlabel("m  (equations in reduced system)")
     ax.set_ylabel("Median(whipped) / Median(random)")
-    ax.set_title("H2 -- Relative solving difficulty: whipped vs random")
+    ax.set_title("H2:Relative solving difficulty: whipped vs random")
     ax.legend()
     ax.grid(True, linestyle="--", alpha=0.4)
     fig.tight_layout()
@@ -382,7 +378,7 @@ def plot_h2_scaling(df, out_dir=H2_PLOTS):
     ax.set_yscale("log")
     ax.set_xlabel("m  (equations in reduced system)")
     ax.set_ylabel("CPU time (s)  [log scale]")
-    ax.set_title("H2 -- Groebner basis scaling: whipped vs random")
+    ax.set_title("H2:Groebner basis scaling: whipped vs random")
     ax.legend()
     ax.grid(True, which="both", linestyle="--", alpha=0.4)
     fig.tight_layout()
@@ -407,7 +403,7 @@ def plot_h2_degree(df, out_dir=H2_PLOTS):
         ax.plot(ms, medians, marker="o", color=color, label=label, linewidth=1.8)
     ax.set_xlabel("m  (equations in reduced system)")
     ax.set_ylabel("Median max degree in Groebner basis")
-    ax.set_title("H2 -- Groebner degree: whipped vs random")
+    ax.set_title("H2:Groebner degree: whipped vs random")
     ax.legend()
     ax.grid(True, linestyle="--", alpha=0.4)
     fig.tight_layout()
@@ -417,9 +413,7 @@ def plot_h2_degree(df, out_dir=H2_PLOTS):
     print(f"Saved {path}")
 
 
-# ---------------------------------------------------------------------------
-# H3: Per-coordinate chi-squared uniformity test on MAYO signatures
-# ---------------------------------------------------------------------------
+# ----------------------- H3 -----------------------
 
 def h3_load_data(path):
     rows = []
@@ -500,9 +494,7 @@ def plot_h3_heatmap(counts_dict, gap, kn, n_samples, out_dir=H3_DIR):
     print(f"Saved {path}")
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+# ----------------------- Main -----------------------
 
 def run_h1():
     if not os.path.exists(H1_CSV):
